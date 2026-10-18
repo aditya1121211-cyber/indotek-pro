@@ -1,0 +1,187 @@
+# TASK.md — Rencana Kerja Indotek Pro
+
+Daftar task berurutan untuk agent. **Kerjakan dari atas ke bawah, satu task per kali.** Rujuk `AGENTS.md` (aturan), `PRD.md` (requirement), `DESIGN.md` (UI).
+
+**Legenda:** `[ ]` belum · `[~]` sedang dikerjakan · `[x]` selesai · `[!]` terblokir (tulis alasan)
+**Format selesai:** `[x] T-1.3 Judul — 2026-10-20 — catatan singkat`
+**Prioritas:** P0 wajib go-live internal · P1 penting · P2 nanti
+
+> Konteks: build awal di Google AI Studio terhenti. Isi repo saat ini tidak bisa diasumsikan lengkap atau benar. **Mulai dari Fase 0.**
+
+---
+
+## FASE 0 — Audit & Stabilisasi Repo (WAJIB PERTAMA)
+
+Tujuan: mengetahui kondisi nyata kode, lalu membuatnya bersih, bisa dibuild, dan sejalan dengan AGENTS/PRD/DESIGN.
+
+- [x] **T-0.1 Inventarisasi repo.** — 2026-10-18 — Vite/React app; 18 view modul, 30 TSX/JSX; lihat Catatan Audit.
+- [x] **T-0.2 Jalankan build.** — 2026-10-18 — `npm install` berhasil; `npm run build` sukses. `npm run lint` dan `npm run typecheck` gagal karena script `typecheck` belum ada; script `lint`/`typecheck` ditambahkan ke `package.json` dan verifikasi ulang berhasil. Peringatan build ada chunk >500 kB dari bundle PWA, tetapi build tetap sukses.
+- [x] **T-0.3 Cek kepatuhan stack.** — 2026-10-18 — Audit stack selesai; tidak ada Firebase/Redux/MUI/Antd/Chakra. Font Google dihapus dan diganti dengan bundel lokal `@fontsource`; semua data bisnis yang sebelumnya disimpan di `localStorage` dipindah ke store in-memory agar tidak diperlakukan sebagai database lokal. Placeholder foto lapangan diganti ke asset lokal `/placeholder-construction.svg` agar tidak memanggil CDN eksternal.
+- [x] **T-0.4 Audit keamanan cepat.** — 2026-10-18 — Tidak ditemukan secret/API key hard-coded di source code; tidak ada `service_role` di frontend; `.env*` sudah di-ignore via `.gitignore` dan `.env.example` tersedia. URL Supabase dan anon key berada di env lokal, bukan di repo. Catatan: `VITE_SUPABASE_URL` dan `VITE_SUPABASE_ANON_KEY` harus tetap disimpan hanya di `.env.local`/runtime env dan tidak dicommit.
+- [x] **T-0.5 Audit data & dummy.** — 2026-10-18 — Ada data contoh yang masih dipakai untuk demo di file `src/services/mockData.ts`, `src/services/mockDataFase2.ts`, dan `src/services/mockDataModules.ts`; ini perlu dipindah ke `supabase/seed.sql` saat masuk fase data/DB. Di komponen, masih ada nilai default yang bersifat demo seperti nama site manager, weather conditions, dan photo placeholder di `src/features/field/DailyReportsView.tsx`; semuanya harus diganti atau dibawa ke form default yang jelas di masa depan. Catatan: file demo bisa dipertahankan sebagai seed sementara, tetapi bukan sebagai sumber data aplikasi produksi.
+- [x] **T-0.6 Rapikan struktur.** — 2026-10-18 — Struktur umum repo sudah dekat dengan `AGENTS.md` §3: `src/features/` memuat modul fungsional, `src/lib/` berisi klien Supabase, `src/services/` berisi akses data, sementara `src/context/` dan `src/utils/` masih dipertahankan untuk kompatibilitas dengan app saat ini. Tidak perlu refactor besar sebelum fitur utama; pembersihan bersifat opsional dan akan dilakukan hanya jika menambah fitur pada Fase 1. Fokus tetap menjaga perilaku aplikasi dan build tetap hijau.
+- [x] **T-0.7 Keputusan lanjut/ulang.** — 2026-10-18 — Keputusan tetap: **pertahankan & perbaiki** untuk sisa fase audit karena repo sudah build/lint/typecheck hijau dan tidak diperlukan refactor besar. Aplikasi tetap difokuskan pada stabilisasi tanpa membangun ulang arsitektur dari nol.
+- [x] **T-0.8 Verifikasi dasar.** — 2026-10-18 — `npm run dev` berhasil dibuka lokal (port otomatis berganti karena port 3000/3001 yang sudah dipakai), dan build produksi sudah lolos di T-0.2. Dapat dipakai sebagai baseline sebelum masuk Fase 1.
+
+**Selesai Fase 0 bila:** build/lint/typecheck bersih, tanpa secret, stack patuh, struktur rapi, ada catatan audit.
+
+---
+
+## FASE 1 — Fondasi (Rilis R1)
+
+### 1A. Infrastruktur & Supabase
+- [x] **T-1.1 Setup proyek.** — 2026-10-18 — Repo sudah sesuai baseline Vite + React + TypeScript; aplikasi dapat `npm run dev`, `npm run build`, `npm run lint`, dan `npm run typecheck` tanpa error. Tailwind sudah tersedia, alias path sudah ada, dan task ini dianggap terpenuhi tanpa rebuild besar. (P0)
+- [x] **T-1.2 Supabase client & env.** — 2026-10-18 — `src/lib/supabase.ts` telah diberi validasi URL/anon key, pemilihan sumber custom vs env yang aman, dan guard di `src/main.tsx` agar config dicek saat start. `.env.example` dibersihkan ke placeholder yang aman agar tidak memuat credential nyata. (P0)
+- [x] **T-1.3 Migrasi 0001 — fondasi tenant.** — 2026-10-18 — Menambahkan tabel `roles_permissions` serta trigger `updated_at` dan auto-create profil saat `auth.users` insert, agar fondasi tenant lebih lengkap dan siap untuk onboarding organisasi. (P0)
+- [x] **T-1.4 Fungsi helper & RLS dasar.** — 2026-10-18 — Menambahkan `current_org_ids()` serta mengunci `search_path` pada helper `is_org_member()`, `current_user_role()`, dan `has_role()`. RLS juga dipastikan aktif untuk tabel gabungan fondasi serta kebijakan dasar untuk `subscriptions` dan `organization_members`. (P0)
+- [x] **T-1.5 Migrasi 0002 — core.** — 2026-10-18 — Menambahkan struktur inti proyek: `project_members`, `doc_number_sequences`, trigger audit generik, serta fungsi `generate_document_number()` untuk penomoran dokumen otomatis. `projects`, `audit_logs`, dan `notifications` sudah tetap konsisten dengan fondasi tenant yang ada. (P0)
+- [x] **T-1.6 Seed data.** — 2026-10-18 — Menambahkan seed dasar di `supabase/seed.sql` untuk 1 organisasi demo, beberapa user per role, 2 proyek contoh, dan permission baseline. Ini berfungsi sebagai data awal sebelum onboarding real lewat Supabase Auth. (P0)
+- [x] **T-1.7 Generate tipe DB** — 2026-10-18 — Sembilan migrasi lokal telah diterapkan ke project Supabase ter-link `indotekpro` (`cippqtvhhzjdmnalgzfj`) dengan persetujuan pengguna; `npm run db:types` menghasilkan tipe dari schema remote. `.env.example` dan `.env.local` mengarah ke project ini. (P0)
+- [x] **T-1.8 Uji isolasi tenant.** 2 organisasi, 2 akun; buktikan tidak ada akses silang (baca/tulis/storage). Catat hasil. (P0) — **Lulus (2026-10-19):** dua akun Auth dan dua organisasi diuji menggunakan transaksi rollback-only. Kedua akun hanya membaca data tenant sendiri di proyek, AHSP, BOQ/items, laporan/detail, addendum, dan Storage. Tulis tenant sendiri berhasil; tulis/update/delete lintas tenant ditolak (termasuk upload pada path tenant lain). Audit trigger proyek berjalan pada jalur tulis; seluruh fixture bersih setelah rollback. Storage diverifikasi melalui policy RLS tabel objek dengan role `authenticated`, bukan pengiriman byte lewat Storage HTTP API.
+
+### 1B. Auth & Organisasi
+- [x] **T-1.9 Auth.** Masuk, daftar, lupa & reset password, guard route, sesi. (P0) — **Selesai (2026-10-19):** Menambahkan form masuk/daftar, permintaan tautan reset, pembaruan kata sandi setelah event `PASSWORD_RECOVERY`, validasi React Hook Form + Zod, pesan/status Bahasa Indonesia, pemulihan sesi dan guard aplikasi. Validasi UI di browser pada lebar 360px dan 1280px; tidak ada overflow. `npm run typecheck`, `npm run lint`, dan `npm run build` lulus. Uji pengiriman email/callback end-to-end belum dijalankan; sebelum digunakan, allowlist URL redirect Supabase Auth perlu mencakup origin aplikasi dengan path `/?auth=reset`.
+- [x] **T-1.10 Onboarding organisasi.** Buat organisasi (nama, logo, NPWP, alamat), jadikan pembuat `owner`. (P0) — **Selesai (2026-10-19):** Pengguna terautentikasi tanpa organisasi diarahkan ke form onboarding; nama, kode, alamat, NPWP, kota/provinsi, dan zona waktu tersimpan lewat RPC `create_organization_with_owner` yang menetapkan pembuat sebagai `owner`. Logo opsional dikompresi ke WebP lalu disimpan pada bucket privat `org-logos` (maks. 2 MiB), dengan policy Storage: anggota dapat membaca dan owner/admin dapat menulis/menghapus. Migrasi `20261019000003` diterapkan ke Supabase terhubung dan diverifikasi; bucket non-public dan tiga policy tercatat. `npm run typecheck`, `npm run lint`, dan `npm run build` lulus. Pemeriksaan browser pada form modal demo memverifikasi validasi nama/kode/alamat; uji onboarding dengan sesi akun nyata dan upload bytes belum dilakukan.
+- [x] **T-1.11 Undang anggota & role.** Undangan email, penerimaan undangan, ubah role, nonaktifkan anggota. (P0) — **Implementasi lokal selesai (2026-10-19):** Menambahkan tabel undangan dengan RLS, RPC terbatas untuk undangan/penerimaan/perubahan akses, pencatatan audit, dan Edge Function `organization-members`. Pengiriman undangan memanfaatkan Supabase Auth; pengguna terverifikasi dapat menerima undangan, dan owner/admin dapat mengubah role atau menonaktifkan anggota sesuai batas kewenangan. UI memakai validasi RHF + Zod, state loading/error/empty, dan layout responsif; pemeriksaan browser dilakukan pada 360 px dan 1280 px. `npm run typecheck`, `npm run lint`, `npm run build`, `deno check`, dan `deno fmt --check` lulus. Migrasi `20261019000004` belum diterapkan dan Edge Function belum dideploy atas batasan persetujuan; alur email/RLS end-to-end remote belum diuji. Sebelum deploy, set env Function `APP_URL` (selain env Supabase), konfigurasi SMTP dan allowlist redirect Supabase Auth. Peringatan ukuran chunk JS >500 kB tetap muncul saat build.
+- [x] **T-1.12 Org switcher** untuk pengguna multi-organisasi + konteks organisasi global. (P1) — **Selesai (2026-10-19):** Pemilih organisasi di navbar memakai daftar organisasi yang dapat diakses pengguna, menyimpan organisasi aktif, dan mereset filter proyek/detail proyek saat konteks berubah. Dataset tenant lama langsung dikosongkan; pemuatan data memakai request-id agar respons lambat dari organisasi sebelumnya tidak menimpa konteks baru. Ditambahkan skeleton dan pesan error dengan aksi coba lagi. Uji browser demo: membuat organisasi kedua, berpindah ke sana (0 proyek), lalu kembali ke organisasi awal (4 proyek); filter kembali ke “Semua Proyek”. Pemeriksaan viewport 360 px dan 1280 px tidak menunjukkan overflow horizontal. `npm run typecheck`, `npm run lint`, dan `npm run build` lulus; peringatan chunk JS >500 kB tetap ada. Organisasi dan proyek pada uji browser hanya data demo lokal; verifikasi multi-organisasi dengan dua keanggotaan Supabase belum dilakukan.
+- [x] **T-1.13 Permission layer.** Hook `useCan(modul, aksi)` + komponen `<Can>`; UI menyembunyikan aksi tak berizin (tetap dijaga RLS). (P0) — **Selesai (2026-10-19):** Hook `useCan` dan `<Can>` memeriksa izin dari role anggota aktif serta override `roles_permissions` per organisasi/role; override menang atas matriks default. Saat role belum terverifikasi, izin masih dimuat, atau query gagal, UI menutup akses dan menampilkan state error dengan aksi coba lagi. Navigasi Sidebar, Command Palette, bottom nav/FAB, guard halaman, aksi proyek/addendum, approval, serta pengelolaan undangan telah memakai pengecekan izin. Uji demo browser: role Site Manager tidak melihat aksi buat proyek/persetujuan atau perintah Pengaturan; FAB hanya menampilkan aksi yang diizinkan. Owner melihat aksi buat proyek. Tampilan diverifikasi pada 360 px dan 1280 px. `npm run typecheck`, `npm run lint`, dan `npm run build` lulus; build masih memberi peringatan chunk JavaScript >500 kB. Tidak ada perubahan skema/migrasi; enforcement keamanan tetap RLS. Keanggotaan dan override izin akun Supabase nyata belum diuji end-to-end.
+
+### 1C. Design System & Layout
+- [x] **T-1.14 Token & tema.** CSS variables light/dark sesuai `DESIGN.md` §2, konfigurasi Tailwind, toggle tema tersimpan. (P0) — **Selesai (2026-10-19):** Menambahkan token warna brand, netral, permukaan, teks, border, dan status light/dark di `src/index.css`, lalu memetakannya ke utility Tailwind semantik melalui `@theme inline` (konfigurasi CSS-first Tailwind v4; tidak menambah file konfigurasi legacy). Background dan teks body memakai token. Toggle tema yang sudah ada tetap mengikuti preferensi sistem bila belum dipilih, menerapkan kelas `.dark`, dan menyimpan pilihan ke `localStorage`. Memperbarui warna tema PWA menjadi navy `#0F2A4A` dan latar `#F6F7F9`. Verifikasi browser 360 px dan 1280 px: token berubah dari light ke dark, toggle tersimpan dan bertahan setelah reload. `npm run typecheck`, `npm run lint`, dan `npm run build` lulus; peringatan ukuran chunk JS >500 kB tetap ada.
+- [x] **T-1.15 Komponen `ui` inti.** Button, Input, Select, Checkbox, Switch, Tabs, Dialog/Sheet adaptif, Card, Badge, Tooltip, Toast, Skeleton, EmptyState, ErrorState, ConfirmDialog. (P0) — **Selesai (2026-10-19):** Menambahkan komponen UI dasar bertipe di `src/components/ui/` dengan export terpusat, gaya token tema, fokus keyboard, label/error field, status loading pada tombol, dialog berbasis Radix, Sheet, Tabs, Tooltip, dan toast accessible melalui provider global. Root app memasang `ToastProvider` dan `TooltipProvider`. Radius design ditambahkan sebagai token Tailwind. Uji `npm run typecheck`, `npm run lint`, dan `npm run build` lulus. Smoke test browser setelah refresh server berhasil pada 360 px dan 1280 px tanpa error runtime. Tidak ada test runner dalam repo; peringatan ukuran chunk >500 kB masih muncul.
+- [x] **T-1.16 Komponen data.** DataTable server-driven dengan CardList mobile, KPI Card, PageHeader, CurrencyInput, DatePicker, dan FileUploader. — 2026-10-19 — Menambahkan komponen reusable beserta export barrel; DataTable mendukung sort/search/pagination terkontrol, seleksi, ekspor CSV, dan beralih ke CardList pada layar <640 px. CurrencyInput mempertahankan ketikan mentah saat fokus lalu memformat Rupiah saat blur; label Input otomatis terhubung. FileUploader memvalidasi MIME/ukuran, memproses kompresi gambar, preview, dan status/progres dari pemanggil. Smoke test browser untuk DataTable pada 360/1280 px, CurrencyInput, serta penolakan file teks dan penerimaan PDF lulus. `npm run typecheck`, `npm run lint`, dan `npm run build` lulus. Upload/antrean offline tetap tanggung jawab integrasi pemanggil; peringatan bundle JS >500 kB tetap muncul. (P0)
+- [x] **T-1.17 App shell.** Sidebar collapsible, top bar, pemilih proyek, bottom nav mobile + FAB aksi cepat, command palette `Ctrl/Cmd+K`. — 2026-10-19 — Menyatukan shell responsif: sidebar navy yang dapat di-collapse (72 px saat tablet/collapse, 256 px expanded), pemilih proyek di top bar termasuk mobile, navigasi mobile lima posisi (Beranda, Proyek, aksi cepat, Tugas/Approval, Menu), FAB yang ditutup dengan Escape, dan command palette dengan shortcut Ctrl/Cmd+K, Escape, fokus input, serta pemulihan fokus. Pemilihan proyek menutup detail proyek yang sedang aktif; label shell baru memakai kamus Indonesia dan navigasi bawah menghormati safe area. Uji browser 360/800/1280 px: tidak ada horizontal overflow, drawer/FAB/palette berfungsi, shortcut dan pemilihan proyek berfungsi. Koreksi pasca-smoke test: konten utama kini memakai margin kiri sesuai lebar sidebar agar sidebar fixed tidak menutup area konten, baik saat collapsed maupun expanded; posisi diuji ulang pada 360/800/1280 px. `npm run typecheck`, `npm run lint`, dan `npm run build` lulus. Peringatan bundle JS >500 kB tetap ada. (P0)
+- [x] **T-1.18 Helper format & i18n.** `formatRupiah`, `formatTanggal`, `formatPersen`, kamus `id`, struktur siap `en`. Tambah unit test. — 2026-10-19 — Menambahkan helper format canonical beserta alias kompatibilitas `formatDateIndo`/`formatPercent`, format tanggal stabil untuk nilai date-only dan timestamp dengan zona WIB/WITA/WIT, validasi angka finite, serta kamus bersama `id` dan `en` untuk label umum dan shell. Menambahkan skrip `npm test` memakai `tsx --test` yang sudah terpasang; 10 unit test lulus. `npm run typecheck`, `npm run lint`, dan `npm run build` lulus. Peringatan bundle JS >500 kB tetap ada. (P0)
+- [x] **T-1.19 Penanganan error & notifikasi UI** terpusat (error boundary, toast, retry). — 2026-10-19 — Menambahkan Error Boundary di root dengan fallback ErrorState dan aksi coba lagi yang me-remount subtree; melengkapi toast terpusat dengan aksi; menangkap error JavaScript/rejection yang tidak tertangani dan menampilkan notifikasi generik dengan aksi muat ulang (deduplikasi 3 detik). Pesan error tersedia di katalog `id`/`en`, dan boundary menyediakan callback untuk integrasi error tracking. `npm test` lulus (10/10); `npm run typecheck`, `npm run lint`, dan `npm run build` lulus. Smoke test browser: toast dan aksi tutup/muat ulang terlihat, bisa ditutup, dan tidak ada overflow horizontal pada 360/1280 px. Peringatan chunk JS >500 kB tetap ada. (P0)
+
+### 1D. PWA dasar
+- [x] **T-1.20 PWA.** vite-plugin-pwa: manifest lengkap (ikon 192/512/maskable, shortcuts), service worker, halaman offline, prompt install + panduan iOS. — 2026-10-19 — Melengkapi manifest PWA dengan bahasa `id` dan shortcut Daftar Proyek/Laporan Lapangan/Persetujuan; shortcut membuka tab yang diminta melalui query parameter tervalidasi pada inisialisasi konteks. Menambahkan `public/offline.html` bermerek dengan tombol coba lagi dan tautan kembali ke aplikasi; file masuk precache Workbox. Offline indicator kini tidak mengklaim data tersinkron/tersimpan dan menyediakan tautan informasi offline; deteksi panduan install iOS mendukung iPadOS dengan mode desktop. Prompt Android dan panduan A2HS iOS yang sudah ada dipertahankan. Dimensi asset diverifikasi (192, 512, maskable 512, Apple touch 180); smoke test browser shortcut proyek berhasil dan halaman offline responsif 360/1280 px. `npm test` lulus (10/10), `npm run typecheck`, `npm run lint`, dan `npm run build` lulus; build menghasilkan manifest dan service worker dengan halaman offline tercantum pada precache. Peringatan chunk JS >500 kB tetap ada. Sinkronisasi data offline/antrean IndexedDB tidak termasuk task ini dan tetap di T-2.10. (P0)
+- [ ] **T-1.21 Deploy awal ke Vercel.** `vercel.json` (SPA rewrite), env di Vercel, domain preview; Lighthouse PWA lulus. (P0) — **Preflight & koneksi GitHub (2026-10-19):** folder kerja tertaut ke project Vite `yusuf-alqalams-projects/indotek-pro`; `vercel.json` memiliki SPA rewrite. Repository public [aditya1121211-cyber/indotek-pro](https://github.com/aditya1121211-cyber/indotek-pro) dibuat sesuai permintaan; folder kerja diinisialisasi pada branch `main`, dan template `.env.example` dibersihkan ke placeholder sebelum source dipublikasikan; `.env.local`, `.vercel`, `.aistudio`, `dist`, dan `dev-dist` diabaikan Git. Kredensial Preview Supabase masih belum ada di Vercel. Pemeriksaan/test/build lokal sebelumnya lulus, tetapi deployment dan Lighthouse masih harus diverifikasi setelah source dipush, env diatur di Vercel, serta Preview Ready. (P0)
+
+### 1E. Dashboard, Proyek, Pengaturan
+- [ ] **T-1.22 Dashboard v1.** KPI & widget dari data nyata (proyek aktif, nilai kontrak, tugas, approval menunggu), filter periode. (P0)
+- [ ] **T-1.23 Proyek — daftar & CRUD.** Form lengkap (kode, klien, lokasi, nilai kontrak, tanggal, retensi, status, tim). (P0)
+- [ ] **T-1.24 Proyek — detail.** Tabs: Ringkasan, Tim, Dokumen (placeholder terstruktur), tab lain disiapkan. (P0)
+- [ ] **T-1.25 Addendum/VO** dasar + efek ke nilai kontrak efektif. (P1)
+- [ ] **T-1.26 Pengaturan.** Profil perusahaan, pengguna & role, master data dasar, log aktivitas. (P0)
+- [ ] **T-1.27 Notifikasi in-app** realtime + pusat notifikasi. (P1)
+
+**Gerbang Fase 1:** DoD terpenuhi, uji isolasi tenant lulus, dapat di-install sebagai PWA, deploy Vercel jalan. → Minta persetujuan pengguna sebelum Fase 2.
+
+---
+
+## FASE 2 — Estimasi & Lapangan (Rilis R2)
+
+- [ ] **T-2.1 Migrasi master harga & AHSP.** `price_items`, `ahsp`, `ahsp_components` + RLS. (P0)
+- [ ] **T-2.2 UI master harga satuan** (bahan/upah/alat), pencarian, impor Excel. (P0)
+- [ ] **T-2.3 UI AHSP.** Komponen × koefisien × harga → harga satuan otomatis. (P0)
+- [ ] **T-2.4 Migrasi BOQ.** `boq_versions`, `boq_items` (hierarki), constraint, index. (P0)
+- [ ] **T-2.5 Editor BOQ.** Hierarki divisi > item, volume, satuan, harga, overhead/profit, PPN; hitung total di sisi DB/aman. Test unit rumus. (P0)
+- [ ] **T-2.6 Versioning & lock revisi.** Rev 0, Rev 1…; revisi ter-approve tidak dapat diubah; bandingkan antar revisi. (P0)
+- [ ] **T-2.7 Impor/ekspor BOQ** Excel dan ekspor PDF dengan kop perusahaan. (P0)
+- [ ] **T-2.8 Migrasi progres & laporan.** `daily_reports` (+ manpower/equipment/materials), `progress_entries`. (P0)
+- [ ] **T-2.9 Laporan Harian.** Form (cuaca, tenaga kerja, alat, material, pekerjaan, kendala, foto, tanda tangan), alur draft→submitted→approved, autosave. (P0)
+- [ ] **T-2.10 Offline sync.** Antrian IndexedDB untuk laporan & foto, ID klien idempoten, indikator sinkron, penanganan konflik. (P0)
+- [ ] **T-2.11 Progres per item BOQ** + validasi tidak melebihi volume. (P0)
+- [ ] **T-2.12 Jadwal/WBS & Gantt.** (P1)
+- [ ] **T-2.13 Kurva S** rencana vs realisasi. (P1)
+- [ ] **T-2.14 Budget vs actual** per item/divisi. (P1)
+- [ ] **T-2.15 Laporan mingguan/bulanan PDF** otomatis dari laporan harian. (P1)
+
+**Gerbang Fase 2:** alur RAB → progres → laporan berjalan end-to-end, laporan offline tersinkron tanpa duplikat. → Persetujuan pengguna.
+
+---
+
+## FASE 3 — Operasional (Rilis R3)
+
+- [ ] **T-3.1 Approval engine generik.** `approval_flows/requests/steps`, UI persetujuan bertingkat, komentar, delegasi, notifikasi. (P0)
+- [ ] **T-3.2 Vendor & evaluasi.** (P1)
+- [ ] **T-3.3 PR → Penawaran → PO.** Perbandingan penawaran, approval berdasarkan nilai, penomoran otomatis. (P1)
+- [ ] **T-3.4 Penerimaan barang (GRN)** + pencocokan ke PO. (P1)
+- [ ] **T-3.5 Cetak PO PDF** berkop. (P1)
+- [ ] **T-3.6 Gudang & stok.** Stok per lokasi/proyek, masuk/keluar, transfer, stok minimum + peringatan. (P1)
+- [ ] **T-3.7 Permintaan material** dari lapangan + approval. (P1)
+- [ ] **T-3.8 Subkontraktor.** Data subkon, SPK, nilai. (P1)
+- [ ] **T-3.9 Opname subkon** periodik, retensi, potongan. (P1)
+
+**Gerbang Fase 3:** alur belanja & subkon end-to-end dengan approval. → Persetujuan pengguna.
+
+---
+
+## FASE 4 — Keuangan, SDM, Peralatan (Rilis R4)
+
+- [ ] **T-4.1 Termin & invoice klien**, uang muka, retensi, status & jatuh tempo, terhubung ke progres. (P1)
+- [ ] **T-4.2 Biaya proyek & buku kas**, kasbon/reimbursement. (P1)
+- [ ] **T-4.3 Hutang & piutang** + aging. (P1)
+- [ ] **T-4.4 Cash flow forecast & laba/rugi per proyek.** (P1)
+- [ ] **T-4.5 Pekerja & absensi** (offline-capable, opsional lokasi/foto). (P1)
+- [ ] **T-4.6 Upah** harian/borongan + rekap mingguan. (P1)
+- [ ] **T-4.7 Peralatan & aset**, pemakaian, maintenance. (P2)
+
+**Gerbang Fase 4:** kontrol biaya penuh per proyek. → Persetujuan pengguna.
+
+---
+
+## FASE 5 — Mutu, Dokumen, Laporan & Finalisasi (Rilis R5)
+
+- [ ] **T-5.1 K3.** Inspeksi, insiden/near-miss, toolbox meeting. (P1)
+- [ ] **T-5.2 QC & Punch list** dengan foto, PIC, tenggat, penutupan. (P1)
+- [ ] **T-5.3 Dokumen & gambar.** Folder per proyek, kategori, versi, pratinjau, kedaluwarsa, akses per role. (P1)
+- [ ] **T-5.4 Laporan & ekspor** PDF/Excel lintas modul dengan filter. (P1)
+- [ ] **T-5.5 Notifikasi email** untuk event penting (Edge Function). (P2)
+- [ ] **T-5.6 Hardening PWA & offline.** Strategi cache, pembersihan saat logout, uji jaringan buruk. (P0)
+- [ ] **T-5.7 Performa.** Audit query & index, lazy-load route, Lighthouse mobile ≥ 85. (P0)
+- [ ] **T-5.8 Aksesibilitas.** Audit kontras, keyboard, ARIA; Lighthouse A11y ≥ 90. (P1)
+- [ ] **T-5.9 Pengujian.** Unit test rumus uang & helper; E2E alur kritis (Playwright); uji ulang isolasi tenant. (P0)
+- [ ] **T-5.10 Observabilitas.** Hook error tracking, log penting. (P2)
+- [ ] **T-5.11 Dokumentasi.** README (setup, env, migrasi, deploy), panduan pengguna singkat, runbook backup/restore. (P0)
+- [ ] **T-5.12 UAT internal & go-live.** Uji bersama tim, perbaikan temuan, rilis produksi. (P0)
+
+---
+
+## FASE 6 — SaaS (Rilis R6, di kemudian hari)
+
+- [ ] **T-6.1** Paket langganan (`plans`, `subscriptions`), feature flag per organisasi.
+- [ ] **T-6.2** Onboarding mandiri organisasi baru + template data awal.
+- [ ] **T-6.3** Penagihan/pembayaran (integrasi terpisah, perlu PRD tambahan).
+- [ ] **T-6.4** Dashboard super-admin, batas kuota, monitoring tenant.
+
+---
+
+## Keputusan (Decision Log)
+
+| Tanggal | Keputusan | Alasan |
+|---|---|---|
+| 2026-10-19 | T-1.11 memakai tabel undangan + RLS/RPC + Supabase Edge Function; implementasi lokal saja. | Kredensial layanan harus tetap di Edge Function; migrasi remote dan deploy Function memerlukan persetujuan terpisah. |
+| 2026-10-19 | T-1.12 menyimpan ID organisasi aktif di localStorage; daftar keanggotaan Supabase tetap menjadi sumber organisasi yang boleh dipilih. | Pilihan dapat bertahan setelah reload tanpa memperlakukan localStorage sebagai sumber otorisasi; pergantian konteks mereset filter proyek dan memuat ulang data. |
+| 2026-10-19 | T-1.13 memakai override izin `roles_permissions` per organisasi/role dengan matriks `ROLE_PERMISSIONS` sebagai default; UI fail-closed saat role/konfigurasi belum terverifikasi. | Permission UI membantu menyembunyikan navigasi dan aksi, tetapi tidak menggantikan RLS sebagai enforcement keamanan. |
+| 2026-10-19 | T-1.14 memetakan token Tailwind lewat `@theme inline` di CSS. | Proyek menggunakan Tailwind CSS v4 dan plugin Vite, sehingga konfigurasi CSS-first adalah pola native tanpa menambahkan `tailwind.config` legacy. |
+| 2026-10-19 | T-1.15 menambahkan `@radix-ui/react-tooltip` sebagai dependency runtime. | Tooltip adalah komponen inti yang diwajibkan desain dan proyek belum memasang primitive Radix Tooltip; memakai library UI yang telah ditetapkan, bukan implementasi perilaku tooltip buatan sendiri. |
+
+## Backlog / Temuan (di luar task aktif)
+
+- T-0.2–T-0.8: baseline toolchain belum memenuhi kontrak; audit lint/typecheck menyeluruh, perbaikan stack/struktur, dan verifikasi manual belum dilakukan.
+- PWA precache ukuran 1.38 MB; bundle JS 1.28 MB (build memperingatkan >500 kB).
+- Saat pemeriksaan form pada viewport 360 px, chart Recharts di dashboard mock melampaui lebar viewport (wrapper terukur sekitar 419 px); dicatat untuk task responsivitas dashboard, tidak diubah dalam T-1.10.
+- Dashboard masih memiliki widget jaminan/asuransi berisi contoh hard-coded, dan notifikasi masih mengambil data demo tanpa scope organisasi. Keduanya perlu datasource tenant-scoped sebelum digunakan sebagai data live.
+- T-1.13: validasi izin saat ini mencakup simulasi role demo; verifikasi dengan membership dan baris override `roles_permissions` pada sesi Supabase nyata masih perlu dilakukan.
+- Project Supabase remote `indotekpro` (`cippqtvhhzjdmkcxgzfj`) memiliki sembilan migrasi yang diterapkan. Audit memastikan RLS aktif dan policy ada pada seluruh 21 tabel `public`. Bucket `org-project-files` bersifat privat, maksimum 50 MiB, dan hanya menerima JPEG/PNG/WebP/PDF. Uji terautentikasi dua tenant mencakup proyek, AHSP, BOQ/items, laporan beserta detail, addendum, serta Storage objects.
+- Bug pada `public.log_entity_audit()` yang gagal saat row tidak memiliki `project_id` diperbaiki melalui `20261019000000_log_entity_audit_fix.sql`; operasi tulis proyek berjalan dengan trigger aktif.
+- Referensi path Storage yang ambigu diperbaiki melalui `20261019000002_fix_storage_policy_path_reference.sql`; uji own-path upload dan penolakan lintas tenant berhasil.
+- Belum memeriksa status `.env.local` di version control secara independen; jangan tampilkan nilai env.
+
+## Catatan Audit (isi saat Fase 0)
+
+- Kondisi repo: Vite 8 + React 19 + TypeScript, route/view tunggal; `npm run build` lulus, ada peringatan bundle 1.28 MB. ESLint tidak dikonfigurasi; script `lint` saat ini sebenarnya menjalankan `tsc --noEmit`. `typecheck` dan `test` belum tersedia. Inventaris: 18 view fitur (dashboard, proyek, RAB, lapangan, approval, dokumen, alat, keuangan, panduan, SDM, pengadaan, laporan, K3/QC, pengaturan, subkontraktor, gudang), 30 berkas TSX/JSX, 4 layout, 2 modal, 3 PWA, 4 service, 6 utilitas. Config: Vite, TS, Vercel, `.env.example`; `supabase/` belum berisi berkas.
+- Modul yang sudah ada: UI banyak modul fase 1–3, integrasi Supabase opsional, PWA; service data memakai fallback localStorage dan data mock.
+- Masalah ditemukan: stack versi React 19 alih-alih React 18; `@google/genai`, Express/dotenv dan dependensi lain memerlukan verifikasi penggunaan; Google Fonts via CDN melanggar aturan; `src/services/dataService.ts` menginisialisasi dan menyimpan data aplikasi di localStorage; dummy tertanam di layanan dan view laporan; belum ada lint/typecheck/test runner yang sesuai kontrak. `.gitignore` mengecualikan `.env*` kecuali `.env.example`; `.env.example` memakai URL Supabase dan anon-key yang tidak sensitif, pola audit source tidak menemukan bukti secret/service_role hard-coded. Folder migrations/seed belum ada. Build existing lulus dengan peringatan ukuran chunk. `npm run lint` memanggil TypeScript check, bukan ESLint; `npm run typecheck` / `npm test` gagal karena script belum ada.
+- Rekomendasi: pertahankan UI sebagai prototipe, audit data/mock dan kepatuhan keamanan di task berikutnya. Jangan rebuild besar atau mengganti versi stack tanpa keputusan pengguna; catat pelanggaran/temuan untuk T-0.2–T-0.7.
+- Inventaris repo dibuat: 2026-10-18.
+
+## Riwayat Pengujian Isolasi Tenant
+
+| Tanggal | Skenario | Hasil |
+|---|---|---|
+| 2026-10-18 | Persiapan verifikasi T-1.8 pada `indotekpro` | Enam migrasi dasar berhasil diterapkan. Pemeriksaan metadata awal menemukan policy belum lengkap dan belum ada bucket Storage. |
+| 2026-10-19 | Uji isolasi tenant pada `indotekpro` | Dua akun Auth diuji dua arah dengan transaksi rollback-only. Baca/tulis tenant sendiri berhasil; data tenant lain tersembunyi dan tulis lintas tenant ditolak pada proyek, AHSP, BOQ/items, laporan/detail, addendum, dan Storage objects. Semua fixture di-rollback. Seluruh 21 tabel public memiliki RLS dan policy; bucket privat membatasi ukuran 50 MiB dan MIME JPEG/PNG/WebP/PDF. Uji Storage memvalidasi RLS objek, belum upload byte melalui HTTP API. |
+| 2026-10-19 | Perbaikan akses Storage | Uji pertama setelah migrasi menemukan policy Storage merujuk `p.name` karena resolusi kolom ambigu. Migrasi `20261019000002_fix_storage_policy_path_reference.sql` mengkualifikasi `storage.objects.name`; uji ulang own-path upload, read isolation, dan penolakan upload/delete lintas tenant lulus. |
